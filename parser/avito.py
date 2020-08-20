@@ -11,12 +11,19 @@ class advert():
 
         self.soup = snippet
         link_a = snippet.find('a', class_='snippet-link')
+        link_a_text = snippet.find('a', class_='snippet-link').get_text().replace('\n','')
         tech_spec = snippet.find('div', class_="specific-params").get_text()[1:-2].split(',')
 
         # todo: сделать assert тесты на распаршенные данные
-        self.brand = link_a.get_text().split(',')[0].split(' ')[0]
-        self.model = link_a.get_text().split(',')[0][len(self.brand) + 1:]
-        self.year = int(link_a.get_text().split(',')[1])
+        self.brand = link_a_text.split(',')[0].split(' ')[1]
+        assert (len(self.brand) > 3) and (' ' not in self.brand), 'brand_error: {}'.format(self.brand)
+
+        self.model = link_a_text.split(',')[0].lstrip()[len(self.brand) + 1:]
+        # assert (len(self.model) > 3), 'model_error: {}'.format(self.model)
+
+        self.year = int(link_a_text.split(',')[1])
+        assert (1950 < self.year < 2021), 'year_error: {}'.format(self.year)
+
         self.url = 'https://www.avito.ru' + link_a.get('href')
         self.ad_id = int(self.url.split('_')[-1])
         self.price = int(snippet.find('span', class_="snippet-price").get_text()[1:-4].replace(' ', ''))
@@ -87,8 +94,8 @@ class list_of_adverts(list):
         total_pages = get_total_pages(url)
         page_part = '&p='
 
-        #         for i in range(1, total_pages+1):
-        for i in range(1, 3):
+        for i in range(1, total_pages+1):
+        # for i in range(1, 3):
             numbered_page_url = url + page_part + str(i)
             soup = BeautifulSoup(get_html(numbered_page_url), 'lxml')
             soup_list = soup.find_all('div', class_='snippet-horizontal')
@@ -97,23 +104,20 @@ class list_of_adverts(list):
                     ad = advert()
                     ad.snippet_parse(snippet_soup)
                     self.append(ad)
-                except:
-                    pass
+                except Exception as e:
+                    print(e)
             print('Page {} DONE'.format(i))
 
-    def create_frame(self):
+        print('Total ads parsed: ', len(self))
 
-        frame = pd.DataFrame(columns=['brand', 'model', 'gen', 'modification', 'year', 'mileage', 'condition',
-                                      'owners', 'vin_masked', 'body_type', 'doors', 'fuel_type', 'engine_volume'
-            , 'engine_power'
-              'gearbox', 'drive', 'color', 'location', 'seller', 'text',
-                                      'price', 'ad_id', 'url'])
-
-        for ad in self:
-            if ad.snippet_parsed:
-                frame = frame.append(pd.DataFrame.from_dict(ad.export_dictionary()))
-
-        return frame
+    def from_base(self, conn, table_name):
+        cur = conn.cursor()
+        # cur.execute("SELECT DISTINCT * FROM {};".format(table_name))
+        cur.execute("SELECT * FROM {};".format(table_name))
+        for line in cur.fetchall():
+            ad = advert()
+            ad.tuple_parse(line)
+            self.append(ad)
 
     def to_base(self, conn, table_name):
         cur = conn.cursor()
@@ -134,19 +138,33 @@ class list_of_adverts(list):
                     """.format(table_name))
         conn.commit()
 
-        tuple_list = []
         for ad in self:
-            tuple_list.append(ad.export_tuple())
-        cur.executemany("INSERT INTO  " + str(table_name) + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);", tuple_list)
-        conn.commit()
+            try:
+                cur.execute("INSERT INTO  " + str(table_name) + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);", ad.export_tuple())
+                conn.commit()
+            except Exception as e:
+                print(e, ad.ad_id)
 
-    def from_base(self, conn, table_name):
-        cur = conn.cursor()
-        cur.execute("SELECT DISTINCT * FROM {};".format(table_name))
-        for line in cur.fetchall():
-            ad = advert()
-            ad.tuple_parse(line)
-            self.append(ad)
+
+    def to_csv(self, file_name):
+        self.create_frame().to_csv(file_name)
+
+    def create_frame(self):
+
+        frame = pd.DataFrame(columns=['brand', 'model', 'gen', 'modification', 'year', 'mileage', 'condition',
+                                      'owners', 'vin_masked', 'body_type', 'doors', 'fuel_type', 'engine_volume'
+            , 'engine_power'
+              'gearbox', 'drive', 'color', 'location', 'seller', 'text',
+                                      'price', 'ad_id', 'url'])
+
+        for ad in self:
+            if ad.snippet_parsed:
+                frame = frame.append(pd.DataFrame.from_dict(ad.export_dictionary()))
+
+        return frame
+
+
+
 
 
 

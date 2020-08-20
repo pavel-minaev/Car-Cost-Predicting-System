@@ -2,12 +2,13 @@ from parser.avito import list_of_adverts
 import sqlite3
 
 
-def parse_avito(link, table_name, db_name='./database/avito_parsing.db'):
+def parse_avito(link, table_name, csv_file_name, db_name='./database/avito_parsing.db'):
     ads_list = list_of_adverts()
     try:
         ads_list.from_url(link)
         conn = sqlite3.connect(db_name)
         ads_list.to_base(conn, table_name)
+        ads_list.to_csv(csv_file_name)
 
     except Exception as e:
         print(e)
